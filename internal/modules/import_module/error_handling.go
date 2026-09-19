@@ -147,7 +147,7 @@ func (u *BlueprintUpdater) ignorePropertyUpdate(ctx context.Context, id string, 
 	}
 	retry := cloneBlueprint(blueprint)
 	retryProps := ensureProperties(retry)
-	if existingProps, ok := existing["properties"].(map[string]interface{}); ok {
+	if existingProps, ok := blueprintProperties(existing); ok {
 		if existingProp, ok := existingProps[property]; ok {
 			retryProps[property] = existingProp
 		} else {
@@ -168,12 +168,12 @@ func (u *BlueprintUpdater) recreateProperty(ctx context.Context, id string, blue
 	if err != nil {
 		return fmt.Errorf("failed to fetch blueprint before recreating property %s: %w", property, err)
 	}
-	existingProps, _ := existing["properties"].(map[string]interface{})
+	existingProps, _ := blueprintProperties(existing)
 	currentSchema, hasCurrent := existingProps[property]
 	if !hasCurrent {
 		return fmt.Errorf("cannot recreate property %s on blueprint %s: property does not exist in target", property, id)
 	}
-	desiredProps, _ := blueprint["properties"].(map[string]interface{})
+	desiredProps, _ := blueprintProperties(blueprint)
 	desiredSchema, hasDesired := desiredProps[property]
 	if !hasDesired {
 		return fmt.Errorf("cannot recreate property %s on blueprint %s: desired property schema is missing", property, id)
@@ -363,12 +363,28 @@ func cloneMap(in map[string]interface{}) map[string]interface{} {
 	return out
 }
 
-func ensureProperties(bp api.Blueprint) map[string]interface{} {
-	if props, ok := bp["properties"].(map[string]interface{}); ok {
-		return props
+// blueprintProperties returns the blueprint's property schemas, which the Port
+// API nests under the top-level "schema" object.
+func blueprintProperties(bp api.Blueprint) (map[string]interface{}, bool) {
+	schema, ok := bp["schema"].(map[string]interface{})
+	if !ok {
+		return nil, false
 	}
-	props := make(map[string]interface{})
-	bp["properties"] = props
+	props, ok := schema["properties"].(map[string]interface{})
+	return props, ok
+}
+
+func ensureProperties(bp api.Blueprint) map[string]interface{} {
+	schema, ok := bp["schema"].(map[string]interface{})
+	if !ok {
+		schema = make(map[string]interface{})
+		bp["schema"] = schema
+	}
+	props, ok := schema["properties"].(map[string]interface{})
+	if !ok {
+		props = make(map[string]interface{})
+		schema["properties"] = props
+	}
 	return props
 }
 
