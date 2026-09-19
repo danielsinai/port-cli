@@ -24,8 +24,10 @@ func TestBlueprintUpdaterForbiddenFormatChangeIgnoreProperty(t *testing.T) {
 				"ok": true,
 				"blueprint": map[string]interface{}{
 					"identifier": "service",
-					"properties": map[string]interface{}{
-						"url": map[string]interface{}{"type": "string"},
+					"schema": map[string]interface{}{
+						"properties": map[string]interface{}{
+							"url": map[string]interface{}{"type": "string"},
+						},
 					},
 				},
 			})
@@ -45,7 +47,8 @@ func TestBlueprintUpdaterForbiddenFormatChangeIgnoreProperty(t *testing.T) {
 				})
 				return
 			}
-			props := body["properties"].(map[string]interface{})
+			schema := body["schema"].(map[string]interface{})
+			props := schema["properties"].(map[string]interface{})
 			urlProp := props["url"].(map[string]interface{})
 			if _, hasFormat := urlProp["format"]; hasFormat {
 				t.Fatalf("expected retry to preserve existing url property without format, got %#v", urlProp)
@@ -67,8 +70,10 @@ func TestBlueprintUpdaterForbiddenFormatChangeIgnoreProperty(t *testing.T) {
 	})
 	err := updater.Update(context.Background(), "service", api.Blueprint{
 		"identifier": "service",
-		"properties": map[string]interface{}{
-			"url": map[string]interface{}{"type": "string", "format": "url"},
+		"schema": map[string]interface{}{
+			"properties": map[string]interface{}{
+				"url": map[string]interface{}{"type": "string", "format": "url"},
+			},
 		},
 	}, BlueprintUpdatePUT)
 	if err != nil {
@@ -99,8 +104,10 @@ func TestBlueprintUpdaterForbiddenFormatChangeRecreateProperty(t *testing.T) {
 				"ok": true,
 				"blueprint": map[string]interface{}{
 					"identifier": "service",
-					"properties": map[string]interface{}{
-						"url": map[string]interface{}{"type": "string"},
+					"schema": map[string]interface{}{
+						"properties": map[string]interface{}{
+							"url": map[string]interface{}{"type": "string"},
+						},
 					},
 				},
 			})
@@ -110,7 +117,8 @@ func TestBlueprintUpdaterForbiddenFormatChangeRecreateProperty(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatalf("decode update body: %v", err)
 			}
-			props, _ := body["properties"].(map[string]interface{})
+			schema, _ := body["schema"].(map[string]interface{})
+			props, _ := schema["properties"].(map[string]interface{})
 			switch updateCalls {
 			case 1:
 				w.WriteHeader(http.StatusUnprocessableEntity)
@@ -215,8 +223,10 @@ func TestBlueprintUpdaterForbiddenFormatChangeRecreateProperty(t *testing.T) {
 	})
 	err := updater.Update(context.Background(), "service", api.Blueprint{
 		"identifier": "service",
-		"properties": map[string]interface{}{
-			"url": map[string]interface{}{"type": "string", "format": "url"},
+		"schema": map[string]interface{}{
+			"properties": map[string]interface{}{
+				"url": map[string]interface{}{"type": "string", "format": "url"},
+			},
 		},
 	}, BlueprintUpdatePUT)
 	if err != nil {
