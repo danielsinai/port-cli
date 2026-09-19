@@ -203,18 +203,15 @@ func (c *Client) request(ctx context.Context, method, path string, data any, par
 	}
 
 	var resp *http.Response
+	var retryDelay time.Duration
 
 	// Retry logic with exponential backoff
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			delay := baseRetryDelay * time.Duration(1<<uint(attempt-1))
-			if delay > maxRetryDelay {
-				delay = maxRetryDelay
-			}
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-			case <-time.After(delay):
+			case <-time.After(retryDelay):
 			}
 		}
 
@@ -229,18 +226,14 @@ func (c *Client) request(ctx context.Context, method, path string, data any, par
 				return nil, fmt.Errorf("failed to execute request after %d attempts: %w", maxRetries+1, err)
 			}
 			// Retry on network errors
+			retryDelay = backoffDelay(attempt)
 			continue
 		}
 
 		// Check if status code is retryable.
 		if retryableStatuses[resp.StatusCode] && attempt < maxRetries {
-			delay := retryAfterDelay(resp, attempt)
+			retryDelay = retryAfterDelay(resp, attempt)
 			resp.Body.Close()
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(delay):
-			}
 			continue
 		}
 
@@ -278,7 +271,17 @@ func (c *Client) request(ctx context.Context, method, path string, data any, par
 	return resp, err
 }
 
-// retryAfterDelay returns how long to wait after a 429 response.
+// backoffDelay returns the exponential backoff delay to wait before the
+// attempt following the given (zero-based) attempt index.
+func backoffDelay(attempt int) time.Duration {
+	delay := baseRetryDelay * time.Duration(1<<uint(attempt))
+	if delay > maxRetryDelay {
+		delay = maxRetryDelay
+	}
+	return delay
+}
+
+// retryAfterDelay returns how long to wait after a retryable response.
 // Reads Retry-After header first; falls back to exponential backoff.
 func retryAfterDelay(resp *http.Response, attempt int) time.Duration {
 	if ra := resp.Header.Get("Retry-After"); ra != "" {
@@ -290,11 +293,7 @@ func retryAfterDelay(resp *http.Response, attempt int) time.Duration {
 			return d
 		}
 	}
-	delay := baseRetryDelay * time.Duration(1<<uint(attempt))
-	if delay > maxRateLimitWait {
-		delay = maxRateLimitWait
-	}
-	return delay
+	return backoffDelay(attempt)
 }
 
 // Close closes the HTTP client (no-op for standard client, but implements closer pattern).

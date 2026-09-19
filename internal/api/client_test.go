@@ -392,3 +392,81 @@ func TestClient_UserAgent(t *testing.T) {
 		}
 	}
 }
+
+// TestClient_request_RetryAfterNotDoubleCounted guards against the retry loop
+// sleeping twice per attempt: once for the Retry-After/backoff delay and again
+// for the generic backoff at the top of the next iteration.
+func TestClient_request_RetryAfterNotDoubleCounted(t *testing.T) {
+	attempts := 0
+	var firstResponseAt time.Time
+	var observedGap time.Duration
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth/access_token" {
+			json.NewEncoder(w).Encode(TokenResponse{AccessToken: "test-token", ExpiresIn: 3600})
+			return
+		}
+
+		attempts++
+		if attempts == 1 {
+			firstResponseAt = time.Now()
+			// No Retry-After header, so the exponential-backoff fallback applies.
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		observedGap = time.Since(firstResponseAt)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientOpts{ClientID: "test-id", ClientSecret: "test-secret", APIURL: server.URL})
+
+	resp, err := client.request(context.Background(), "GET", "/test", nil, nil)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if attempts != 2 {
+		t.Fatalf("expected 2 attempts, got %d", attempts)
+	}
+
+	// The single backoff after attempt 0 is baseRetryDelay. Anything close to
+	// twice that means the delay was applied twice.
+	if observedGap >= 2*baseRetryDelay {
+		t.Errorf("waited %v between attempts, expected roughly %v (delay applied twice?)", observedGap, baseRetryDelay)
+	}
+}
+
+func TestRetryAfterDelay(t *testing.T) {
+	t.Run("uses Retry-After header", func(t *testing.T) {
+		resp := &http.Response{Header: http.Header{"Retry-After": []string{"2"}}}
+		if got := retryAfterDelay(resp, 0); got != 2*time.Second {
+			t.Errorf("got %v, want %v", got, 2*time.Second)
+		}
+	})
+
+	t.Run("caps Retry-After header", func(t *testing.T) {
+		resp := &http.Response{Header: http.Header{"Retry-After": []string{"100000"}}}
+		if got := retryAfterDelay(resp, 0); got != maxRateLimitWait {
+			t.Errorf("got %v, want %v", got, maxRateLimitWait)
+		}
+	})
+
+	t.Run("falls back to exponential backoff", func(t *testing.T) {
+		resp := &http.Response{Header: http.Header{}}
+		for attempt := 0; attempt < 4; attempt++ {
+			want := baseRetryDelay * time.Duration(1<<uint(attempt))
+			if got := retryAfterDelay(resp, attempt); got != want {
+				t.Errorf("attempt %d: got %v, want %v", attempt, got, want)
+			}
+		}
+	})
+
+	t.Run("caps exponential backoff", func(t *testing.T) {
+		if got := backoffDelay(30); got != maxRetryDelay {
+			t.Errorf("got %v, want %v", got, maxRetryDelay)
+		}
+	})
+}
