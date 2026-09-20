@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Fixed
+- Blueprints that reference themselves (for example a `parent` relation targeting their own blueprint) are no longer reported as circular dependencies during `port import` and `port migrate`. Such blueprints - and everything depending on them - were pushed into the best-effort "cyclic" batch, which could apply inherited ownership out of order and fail with an invalid ownership path.
+
 ## 0.3.7
 
 ### Added
