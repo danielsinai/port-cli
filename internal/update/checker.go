@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,9 +120,10 @@ func compareVersions(v1, v2 string) int {
 		return 1
 	}
 
-	// Simple string comparison for semantic versions
-	parts1 := strings.Split(v1, ".")
-	parts2 := strings.Split(v2, ".")
+	// Compare release numbers component by component, numerically. A string
+	// comparison would rank "0.3.9" above "0.3.10".
+	parts1 := strings.Split(releaseNumbers(v1), ".")
+	parts2 := strings.Split(releaseNumbers(v2), ".")
 
 	maxLen := len(parts1)
 	if len(parts2) > maxLen {
@@ -129,13 +131,8 @@ func compareVersions(v1, v2 string) int {
 	}
 
 	for i := 0; i < maxLen; i++ {
-		var p1, p2 string
-		if i < len(parts1) {
-			p1 = parts1[i]
-		}
-		if i < len(parts2) {
-			p2 = parts2[i]
-		}
+		p1 := versionPart(parts1, i)
+		p2 := versionPart(parts2, i)
 
 		if p1 < p2 {
 			return -1
@@ -146,4 +143,26 @@ func compareVersions(v1, v2 string) int {
 	}
 
 	return 0
+}
+
+// releaseNumbers strips any pre-release or build metadata suffix, leaving only
+// the dot-separated release numbers (e.g. "0.3.7-5-gabc123" -> "0.3.7").
+func releaseNumbers(v string) string {
+	if i := strings.IndexAny(v, "-+"); i >= 0 {
+		return v[:i]
+	}
+	return v
+}
+
+// versionPart returns parts[i] as a number, treating missing or unparsable
+// components as 0 so that "1.0" and "1.0.0" compare equal.
+func versionPart(parts []string, i int) int {
+	if i >= len(parts) {
+		return 0
+	}
+	n, err := strconv.Atoi(parts[i])
+	if err != nil {
+		return 0
+	}
+	return n
 }

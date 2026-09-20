@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Fixed
+- `port version --check` now compares version numbers numerically instead of as strings, so double-digit components are ranked correctly. Previously `0.3.9` was considered newer than `0.3.10`, and the CLI reported "You are running the latest version" instead of offering the available update.
+
 ## 0.3.7
 
 ### Added
