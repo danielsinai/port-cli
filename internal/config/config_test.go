@@ -171,3 +171,83 @@ func TestConfig_Validate(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigManager_Load_EnvCredentialsPreserveConfigAPIURL(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	configContent := `default_org: eu-prod
+organizations:
+  eu-prod:
+    client_id: file-client-id
+    client_secret: file-client-secret
+    api_url: https://api.port.io/v1
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	t.Setenv("PORT_CLIENT_ID", "env-client-id")
+	t.Setenv("PORT_CLIENT_SECRET", "env-client-secret")
+	t.Setenv("PORT_API_URL", "")
+
+	cfg, err := NewConfigManager(configPath).Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	org := cfg.Organizations["eu-prod"]
+	if org.ClientID != "env-client-id" || org.ClientSecret != "env-client-secret" {
+		t.Errorf("Expected env credentials to win, got client_id=%q client_secret=%q", org.ClientID, org.ClientSecret)
+	}
+	if org.APIURL != "https://api.port.io/v1" {
+		t.Errorf("Expected api_url from config file to be preserved, got %q", org.APIURL)
+	}
+}
+
+func TestConfigManager_Load_EnvAPIURLOverridesConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	configContent := `default_org: eu-prod
+organizations:
+  eu-prod:
+    client_id: file-client-id
+    client_secret: file-client-secret
+    api_url: https://api.port.io/v1
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	t.Setenv("PORT_CLIENT_ID", "env-client-id")
+	t.Setenv("PORT_CLIENT_SECRET", "env-client-secret")
+	t.Setenv("PORT_API_URL", "https://api.example.com/v1")
+
+	cfg, err := NewConfigManager(configPath).Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if got := cfg.Organizations["eu-prod"].APIURL; got != "https://api.example.com/v1" {
+		t.Errorf("Expected PORT_API_URL to override config file, got %q", got)
+	}
+}
+
+func TestConfigManager_Load_EnvCredentialsWithoutConfigFileUseDefaultAPIURL(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	t.Setenv("PORT_CLIENT_ID", "env-client-id")
+	t.Setenv("PORT_CLIENT_SECRET", "env-client-secret")
+	t.Setenv("PORT_API_URL", "")
+
+	cfg, err := NewConfigManager(configPath).Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if got := cfg.Organizations["default"].APIURL; got != "https://api.getport.io/v1" {
+		t.Errorf("Expected default api_url fallback, got %q", got)
+	}
+}
