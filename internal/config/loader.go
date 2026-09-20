@@ -350,9 +350,6 @@ func (cm *ConfigManager) loadFromEnv(cfg *Config) {
 	clientID := os.Getenv("PORT_CLIENT_ID")
 	clientSecret := os.Getenv("PORT_CLIENT_SECRET")
 	apiURL := os.Getenv("PORT_API_URL")
-	if apiURL == "" {
-		apiURL = "https://api.getport.io/v1"
-	}
 
 	if clientID != "" && clientSecret != "" {
 		// Create or override the "default" organization
@@ -363,6 +360,16 @@ func (cm *ConfigManager) loadFromEnv(cfg *Config) {
 
 		if cfg.Organizations == nil {
 			cfg.Organizations = make(map[string]OrganizationConfig)
+		}
+
+		// Env credentials must not discard the org's api_url from the config
+		// file: only PORT_API_URL overrides it, and the hardcoded default is a
+		// last resort when neither source provides one.
+		if apiURL == "" {
+			apiURL = cfg.Organizations[orgName].APIURL
+		}
+		if apiURL == "" {
+			apiURL = "https://api.getport.io/v1"
 		}
 
 		cfg.Organizations[orgName] = OrganizationConfig{
