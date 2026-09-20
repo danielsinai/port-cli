@@ -257,6 +257,29 @@ func TestTopologicalSort_PartialCycle(t *testing.T) {
 	}
 }
 
+func TestTopologicalSort_SelfReferencingRelationIsNotCyclic(t *testing.T) {
+	// folder has a "parent" relation to itself, file depends on folder.
+	blueprints := []api.Blueprint{
+		{"identifier": "folder", "relations": map[string]interface{}{"parent": map[string]interface{}{"target": "folder"}}},
+		{"identifier": "file", "relations": map[string]interface{}{"folder": map[string]interface{}{"target": "folder"}}},
+	}
+
+	levels, cyclic := TopologicalSort(blueprints, nil)
+
+	if len(cyclic) != 0 {
+		t.Fatalf("expected no cyclic blueprints, got %d", len(cyclic))
+	}
+	if len(levels) != 2 {
+		t.Fatalf("expected 2 levels, got %d", len(levels))
+	}
+	if len(levels[0]) != 1 || levels[0][0]["identifier"] != "folder" {
+		t.Fatalf("expected folder in level 0, got %+v", levels[0])
+	}
+	if len(levels[1]) != 1 || levels[1][0]["identifier"] != "file" {
+		t.Fatalf("expected file in level 1, got %+v", levels[1])
+	}
+}
+
 func TestTopologicalSort_ExternalDependency(t *testing.T) {
 	// A depends on "external" which is in existingBlueprints
 	blueprints := []api.Blueprint{
@@ -346,6 +369,46 @@ func TestTopologicalSortOwnership_ExternalDependencyStartsAtLevelZero(t *testing
 	}
 	if len(levels) != 1 || len(levels[0]) != 1 || levels[0][0]["identifier"] != "deployment" {
 		t.Fatalf("expected deployment in level 0, got %+v", levels)
+	}
+}
+
+func TestTopologicalSortOwnership_SelfReferencingRelationIsNotCyclic(t *testing.T) {
+	blueprints := []api.Blueprint{
+		{
+			"identifier": "folder",
+			"relations": map[string]interface{}{
+				"parent": map[string]interface{}{"target": "folder"},
+			},
+			"ownership": map[string]interface{}{
+				"type": "Inherited",
+				"path": "parent.$identifier",
+			},
+		},
+		{
+			"identifier": "file",
+			"relations": map[string]interface{}{
+				"folder": map[string]interface{}{"target": "folder"},
+			},
+			"ownership": map[string]interface{}{
+				"type": "Inherited",
+				"path": "folder.$identifier",
+			},
+		},
+	}
+
+	levels, cyclic := TopologicalSortOwnership(blueprints)
+
+	if len(cyclic) != 0 {
+		t.Fatalf("expected no cyclic blueprints, got %d", len(cyclic))
+	}
+	if len(levels) != 2 {
+		t.Fatalf("expected 2 ownership levels, got %d", len(levels))
+	}
+	if len(levels[0]) != 1 || levels[0][0]["identifier"] != "folder" {
+		t.Fatalf("expected folder ownership in level 0, got %+v", levels[0])
+	}
+	if len(levels[1]) != 1 || levels[1][0]["identifier"] != "file" {
+		t.Fatalf("expected file ownership in level 1, got %+v", levels[1])
 	}
 }
 

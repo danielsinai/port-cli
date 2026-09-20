@@ -414,6 +414,13 @@ func TopologicalSort(blueprints []api.Blueprint, existingBlueprints map[string]b
 	for id, bp := range bpMap {
 		deps := GetAllDependencies(bp)
 		for _, dep := range deps {
+			// A blueprint that references itself (e.g. a "parent" relation to
+			// its own blueprint) is not a cycle - skip it, otherwise its
+			// in-degree never reaches zero and it (plus everything depending
+			// on it) is reported as cyclic.
+			if dep == id {
+				continue
+			}
 			// Only count dependencies that are in our blueprint set
 			// (not system blueprints or already existing ones)
 			if _, inSet := bpMap[dep]; inSet {
@@ -489,7 +496,9 @@ func TopologicalSortOwnership(blueprints []api.Blueprint) ([][]api.Blueprint, []
 
 	for id, bp := range bpMap {
 		dep := getOwnershipDependency(bp)
-		if dep == "" {
+		if dep == "" || dep == id {
+			// Ownership inherited through a self-referencing relation depends
+			// on no other blueprint, so it must not be treated as a cycle.
 			continue
 		}
 		if _, inSet := bpMap[dep]; inSet {
