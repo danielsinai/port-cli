@@ -4,7 +4,7 @@ A modular command-line interface for Port that enables data import/export, organ
 
 ## Features
 
-- 📤 **Export**: Backup Port data (blueprints, entities, scorecards, actions, teams, automations, pages, integrations)
+- 📤 **Export**: Back up Port data (blueprints, entities, scorecards, actions, teams, automations, pages, integrations)
 - 📥 **Import**: Restore data from backups
 - 🔄 **Migrate**: Transfer data between Port organizations
 - 🔍 **Compare**: Diff two Port organizations and generate reports (text, JSON, HTML)
